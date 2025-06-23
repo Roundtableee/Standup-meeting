@@ -9,6 +9,9 @@ interface AuthContextType {
   register: (userData: RegisterData) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   setUser: (user: AuthUser | null) => void;
+  updateProfile: (updates: Partial<AuthUser>) => Promise<{ success: boolean; error?: string }>;
+  uploadProfilePicture: (file: File) => Promise<{ success: boolean; url?: string; error?: string }>;
+  removeProfilePicture: () => Promise<{ success: boolean; error?: string }>;
 }
 
 interface RegisterData {
@@ -95,6 +98,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         admin: member.admin || false,
         team_id: member.team_id || 0,
         mentor_id: member.mentor_id || undefined,
+        profile_picture: member.profile_picture || undefined,
+        description: member.description || undefined,
         team: member.team || undefined,
       };
 
@@ -160,6 +165,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         admin: newMember.admin || false,
         team_id: newMember.team_id || 0,
         mentor_id: newMember.mentor_id || undefined,
+        profile_picture: newMember.profile_picture || undefined,
+        description: newMember.description || undefined,
         team: newMember.team || undefined,
       };
 
@@ -172,6 +179,80 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return { success: false, error: 'An error occurred during registration' };
     } finally {
       setLoading(false);
+    }
+  };
+
+  const updateProfile = async (updates: Partial<AuthUser>): Promise<{ success: boolean; error?: string }> => {
+    if (!user) return { success: false, error: 'Not authenticated' };
+
+    try {
+      const { error } = await supabase
+        .from('members')
+        .update({
+          name: updates.name,
+          email: updates.email,
+          description: updates.description,
+          profile_picture: updates.profile_picture,
+        })
+        .eq('id', user.id);
+
+      if (error) {
+        return { success: false, error: 'Failed to update profile' };
+      }
+
+      // Update local user state
+      const updatedUser = { ...user, ...updates };
+      setUser(updatedUser);
+      localStorage.setItem('auth_user', JSON.stringify(updatedUser));
+
+      return { success: true };
+    } catch (error) {
+      console.error('Profile update error:', error);
+      return { success: false, error: 'An error occurred while updating profile' };
+    }
+  };
+
+  const uploadProfilePicture = async (file: File): Promise<{ success: boolean; url?: string; error?: string }> => {
+    if (!user) return { success: false, error: 'Not authenticated' };
+
+    try {
+      // Create a unique filename
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+      
+      // Convert file to base64 for storage (in a real app, you'd upload to a file storage service)
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const base64Url = await base64Promise;
+
+      // Update profile picture in database
+      const result = await updateProfile({ profile_picture: base64Url });
+      
+      if (result.success) {
+        return { success: true, url: base64Url };
+      } else {
+        return { success: false, error: result.error };
+      }
+    } catch (error) {
+      console.error('Profile picture upload error:', error);
+      return { success: false, error: 'Failed to upload profile picture' };
+    }
+  };
+
+  const removeProfilePicture = async (): Promise<{ success: boolean; error?: string }> => {
+    if (!user) return { success: false, error: 'Not authenticated' };
+
+    try {
+      const result = await updateProfile({ profile_picture: undefined });
+      return result;
+    } catch (error) {
+      console.error('Profile picture removal error:', error);
+      return { success: false, error: 'Failed to remove profile picture' };
     }
   };
 
@@ -188,6 +269,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       register,
       logout,
       setUser,
+      updateProfile,
+      uploadProfilePicture,
+      removeProfilePicture,
     }}>
       {children}
     </AuthContext.Provider>

@@ -16,7 +16,9 @@ export interface Member {
   username: string;
   password?: string;
   admin: boolean;
-  mentor_id?: number; // Add mentor_id field
+  mentor_id?: number;
+  profile_picture?: string; // Add profile picture field
+  description?: string; // Add description field
   team?: Team;
 }
 
@@ -64,6 +66,8 @@ export interface AuthUser {
   role: 'trainee' | 'mentor';
   admin: boolean;
   team_id: number;
-  mentor_id?: number; // Add mentor_id field
+  mentor_id?: number;
+  profile_picture?: string; // Add profile picture field
+  description?: string; // Add description field
   team?: Team;
 }

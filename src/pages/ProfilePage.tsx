@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, User, Mail, Briefcase, Settings, UserPlus, AlertCircle, CheckCircle, Search, RefreshCw, Calendar } from 'lucide-react';
+import { ArrowLeft, User, Mail, Briefcase, Settings, UserPlus, AlertCircle, CheckCircle, Search, RefreshCw, Calendar, Edit, Save, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import Header from '../components/Layout/Header';
+import ProfilePictureUpload from '../components/Profile/ProfilePictureUpload';
 import { Member } from '../types';
 
 interface ProfilePageProps {
@@ -13,7 +14,7 @@ interface ProfilePageProps {
 }
 
 const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onLeaveManagement, onProfileClick, onTeamClick }) => {
-  const { user } = useAuth();
+  const { user, updateProfile, uploadProfilePicture, removeProfilePicture } = useAuth();
   const { 
     getMentorById, 
     assignMentor, 
@@ -28,6 +29,14 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onLeaveManagement, on
   const [fetchingMentors, setFetchingMentors] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  
+  // Profile editing state
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileData, setProfileData] = useState({
+    name: user?.name || '',
+    email: user?.email || '',
+    description: user?.description || '',
+  });
 
   // Get current user's mentor
   const currentMentor = user?.mentor_id ? getMentorById(user.mentor_id) : null;
@@ -38,6 +47,17 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onLeaveManagement, on
       loadMentors();
     }
   }, [showMentorAssignment]);
+
+  // Update profile data when user changes
+  useEffect(() => {
+    if (user) {
+      setProfileData({
+        name: user.name || '',
+        email: user.email || '',
+        description: user.description || '',
+      });
+    }
+  }, [user]);
 
   const loadMentors = async () => {
     setFetchingMentors(true);
@@ -92,10 +112,51 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onLeaveManagement, on
     }
   };
 
+  const handleProfileSave = async () => {
+    setLoading('save-profile');
+    setMessage(null);
+
+    try {
+      const result = await updateProfile({
+        name: profileData.name.trim(),
+        email: profileData.email.trim(),
+        description: profileData.description.trim(),
+      });
+
+      if (result.success) {
+        setIsEditingProfile(false);
+        setMessage({ type: 'success', text: 'Profile updated successfully!' });
+      } else {
+        setMessage({ type: 'error', text: result.error || 'Failed to update profile' });
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      setMessage({ type: 'error', text: 'An error occurred while updating profile' });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleProfileCancel = () => {
+    setProfileData({
+      name: user?.name || '',
+      email: user?.email || '',
+      description: user?.description || '',
+    });
+    setIsEditingProfile(false);
+  };
+
   const handleTeamClick = () => {
     if (user?.team_id && onTeamClick) {
       onTeamClick(user.team_id);
     }
+  };
+
+  const getProfilePicture = () => {
+    if (user?.profile_picture) {
+      return user.profile_picture;
+    }
+    return undefined;
   };
 
   if (!user) {
@@ -145,34 +206,140 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onLeaveManagement, on
           </div>
         )}
 
+        {/* Profile Picture Upload Section */}
+        <div className="bg-white rounded-lg shadow-md border border-gray-200 p-8 mb-8">
+          <ProfilePictureUpload
+            currentPicture={getProfilePicture()}
+            onUpload={uploadProfilePicture}
+            onRemove={removeProfilePicture}
+            loading={loading === 'save-profile'}
+          />
+        </div>
+
         {/* Profile Information */}
         <div className="bg-white rounded-lg shadow-md border border-gray-200 p-8 mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-semibold text-gray-900">Personal Information</h3>
+            {!isEditingProfile ? (
+              <button
+                onClick={() => setIsEditingProfile(true)}
+                className="inline-flex items-center px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors duration-200"
+              >
+                <Edit className="h-4 w-4 mr-2" />
+                Edit Profile
+              </button>
+            ) : (
+              <div className="flex space-x-2">
+                <button
+                  onClick={handleProfileSave}
+                  disabled={loading === 'save-profile'}
+                  className="inline-flex items-center px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading === 'save-profile' ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
+                  Save
+                </button>
+                <button
+                  onClick={handleProfileCancel}
+                  disabled={loading === 'save-profile'}
+                  className="inline-flex items-center px-3 py-2 bg-gray-600 text-white text-sm rounded-lg hover:bg-gray-700 transition-colors duration-200"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+
           <div className="flex items-start space-x-6">
-            <div className="bg-gradient-to-r from-blue-500 to-indigo-600 p-4 rounded-full">
-              <User className="h-12 w-12 text-white" />
+            <div className="bg-gradient-to-r from-blue-500 to-indigo-600 p-4 rounded-full flex-shrink-0">
+              {user.profile_picture ? (
+                <img
+                  src={user.profile_picture}
+                  alt={user.name}
+                  className="h-12 w-12 rounded-full object-cover"
+                />
+              ) : (
+                <User className="h-12 w-12 text-white" />
+              )}
             </div>
-            <div className="flex-1">
-              <div className="flex items-center mb-3">
-                <h2 className="text-2xl font-bold text-gray-900 mr-4">{user.name}</h2>
-                <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                  user.role === 'mentor' 
-                    ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                    : 'bg-orange-100 text-orange-800 border border-orange-200'
-                }`}>
-                  <Briefcase className="h-4 w-4 mr-1" />
-                  {user.role === 'mentor' ? 'Mentor' : 'Trainee'}
-                </div>
-              </div>
-              <div className="space-y-2 text-gray-600">
-                <div className="flex items-center">
-                  <Mail className="h-4 w-4 mr-2" />
-                  {user.email}
-                </div>
-                <div className="flex items-center">
-                  <User className="h-4 w-4 mr-2" />
-                  @{user.username}
-                </div>
-              </div>
+            <div className="flex-1 space-y-4">
+              {isEditingProfile ? (
+                <>
+                  <div>
+                    <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+                      Full Name
+                    </label>
+                    <input
+                      type="text"
+                      id="name"
+                      value={profileData.name}
+                      onChange={(e) => setProfileData(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
+                      placeholder="Enter your full name"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                      Email Address
+                    </label>
+                    <input
+                      type="email"
+                      id="email"
+                      value={profileData.email}
+                      onChange={(e) => setProfileData(prev => ({ ...prev, email: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
+                      placeholder="Enter your email address"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
+                      Description / Bio
+                    </label>
+                    <textarea
+                      id="description"
+                      rows={4}
+                      value={profileData.description}
+                      onChange={(e) => setProfileData(prev => ({ ...prev, description: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200 resize-none"
+                      placeholder="Tell us about yourself, your interests, goals, or anything you'd like to share..."
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center mb-3">
+                    <h2 className="text-2xl font-bold text-gray-900 mr-4">{user.name}</h2>
+                    <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                      user.role === 'mentor' 
+                        ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                        : 'bg-orange-100 text-orange-800 border border-orange-200'
+                    }`}>
+                      <Briefcase className="h-4 w-4 mr-1" />
+                      {user.role === 'mentor' ? 'Mentor' : 'Trainee'}
+                    </div>
+                  </div>
+                  <div className="space-y-2 text-gray-600">
+                    <div className="flex items-center">
+                      <Mail className="h-4 w-4 mr-2" />
+                      {user.email}
+                    </div>
+                    <div className="flex items-center">
+                      <User className="h-4 w-4 mr-2" />
+                      @{user.username}
+                    </div>
+                  </div>
+                  {user.description && (
+                    <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      <h4 className="text-sm font-medium text-gray-900 mb-2">About Me</h4>
+                      <p className="text-gray-700 text-sm leading-relaxed">{user.description}</p>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
 
